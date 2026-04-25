@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Generate PDF</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.30/jspdf.plugin.autotable.min.js"></script>
+</head>
+<body>
+    <button onclick="generatePDF()">Download PDF</button>
+
+    <script>
+        function generatePDF() {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+
+            // Title & Date
+            const date = new Date().toLocaleDateString();
+            doc.setFont("helvetica", "bold");
+            doc.setFontSize(16);
+            doc.text("INSTANT ROOF PRICE ESTIMATE", 20, 20);
+            doc.setFontSize(12);
+            doc.text(date, 170, 20);
+
+            // Table Data
+            const items = [
+                ["How Much Does a Roof Replacement Cost?", "", "", ""],
+                ["Your home's square footage", "200", "$0", "$0"],
+                ["Full Roof Replacement", "1", "$0", "$0"],
+                ["Brand Preference", "1", "$0", "$0"],
+                ["GAF", "1", "$0", "$0"],
+                ["Choose Your Roofing Material", "", "", ""],
+                ["Metal", "1", "$0", "$0"],
+                ["Metal Roof Pricing Adjustment", "1", "$2,400", "$2,400"],
+                ["Tell me about your house", "", "", ""],
+                ["1 Story", "1", "$0", "$0"],
+                ["Tell me more about your roof", "", "", ""],
+                ["Simple", "1", "$0", "$0"],
+                ["Simple Roof Complexity Adjustment", "1", "$0", "$0"],
+                ["Low", "1", "$0", "$0"],
+                ["Low Roof Pricing Adjustment", "1", "$0", "$0"],
+                ["1-5 Years Old", "1", "$0", "$0"],
+                ["Chimneys", "1", "$0", "$0"],
+                ["Chimney Pricing Adjustment", "1", "$20", "$20"],
+                ["Tell me more about your issues and concerns", "", "", ""],
+                ["No leaks or water damage", "1", "$0", "$0"],
+                ["Accessibility and Logistics", "", "", ""],
+                ["Roof has obstacles", "1", "$0", "$0"],
+                ["Fences", "1", "$0", "$0"],
+                ["Fence Obstacle Pricing Adjustment", "1", "$50", "$50"],
+                ["Weather and Environmental Factors", "", "", ""],
+                ["Energy Efficiency Needed", "1", "$0", "$0"],
+                ["Energy Efficiency Pricing Adjustment", "1", "$150", "$150"],
+                ["Warranty and Maintenance", "", "", ""],
+                ["Extended Manufacturer Warranty", "1", "$0", "$0"],
+                ["Extended Warranty Pricing Adjustment", "1", "$50", "$50"],
+            ];
+
+            // Table Header
+            const headers = [["Description", "Quantity", "Unit Price", "Price"]];
+
+            // Add Table using AutoTable
+            doc.autoTable({
+                startY: 30,
+                head: headers,
+                body: items,
+                theme: 'grid',
+                styles: { fontSize: 10, cellPadding: 2 },
+                headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255] }
+            });
+
+            // Total Price
+            const totalPrice = "$2,670";
+            doc.setFontSize(14);
+            doc.setFont("helvetica", "bold");
+            doc.text(`Total Price: ${totalPrice}`, 20, doc.autoTable.previous.finalY + 10);
+
+            // Save the PDF
+            doc.save("Instant_Roof_Price_Estimate.pdf");
+        }
+    </script>
+</body>
+</html>
