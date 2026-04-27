@@ -101,6 +101,17 @@ function roof_calculator() {
 									Single-Family Home
 								</label>
 							</div>
+
+							<div class="input-group radio">
+								<input type="radio" name="home_type" id="townhome_duplex" value="Townhome / Row Home / Duplex">
+								<label class="area_label" for="townhome_duplex">
+									<img class="desktop radio" src="<?php echo plugins_url('img/chk.png', __FILE__); ?>" alt="">
+									<img class="desktop radio-checked" src="<?php echo plugins_url('img/chk-w.png', __FILE__); ?>" alt="">
+									<img class="mobile radio" src="<?php echo plugins_url('img/chk.png', __FILE__); ?>" alt="">
+									<img class="mobile radio-checked" src="<?php echo plugins_url('img/chk.png', __FILE__); ?>" alt="">			
+									Townhome / Row Home / Duplex
+								</label>
+							</div>
 							
 							<div class="input-group radio">
 								<input type="radio" name="home_type" id="manufactured_mobile_home" value="Manufactured / Mobile Home">
@@ -110,28 +121,6 @@ function roof_calculator() {
 									<img class="mobile radio" src="<?php echo plugins_url('img/chk.png', __FILE__); ?>" alt="">
 									<img class="mobile radio-checked" src="<?php echo plugins_url('img/chk.png', __FILE__); ?>" alt="">		
 									Manufactured / Mobile Home
-								</label>
-							</div>
-
-							<div class="input-group radio">
-								<input type="radio" name="home_type" id="city_row_home" value="City Row Home">
-								<label class="area_label" for="city_row_home">
-									<img class="desktop radio" src="<?php echo plugins_url('img/chk.png', __FILE__); ?>" alt="">
-									<img class="desktop radio-checked" src="<?php echo plugins_url('img/chk-w.png', __FILE__); ?>" alt="">
-									<img class="mobile radio" src="<?php echo plugins_url('img/chk.png', __FILE__); ?>" alt="">
-									<img class="mobile radio-checked" src="<?php echo plugins_url('img/chk.png', __FILE__); ?>" alt="">			
-									City Row Home
-								</label>
-							</div>
-
-							<div class="input-group radio">
-								<input type="radio" name="home_type" id="townhome_duplex" value="Townhome / Duplex">
-								<label class="area_label" for="townhome_duplex">
-									<img class="desktop radio" src="<?php echo plugins_url('img/chk.png', __FILE__); ?>" alt="">
-									<img class="desktop radio-checked" src="<?php echo plugins_url('img/chk-w.png', __FILE__); ?>" alt="">
-									<img class="mobile radio" src="<?php echo plugins_url('img/chk.png', __FILE__); ?>" alt="">
-									<img class="mobile radio-checked" src="<?php echo plugins_url('img/chk.png', __FILE__); ?>" alt="">			
-									Townhome / Duplex
 								</label>
 							</div>
 							

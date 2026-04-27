@@ -105,17 +105,6 @@ function debug_table_structure() {
 debug_table_structure();
 
 
-function loadZipCodes($filename) {
-    $zipCodes = [];
-    if (($handle = fopen($filename, "r")) !== FALSE) {
-        while (($data = fgetcsv($handle, 1000, ",")) !== FALSE) {
-            $zipCodes[] = $data[0]; // Assuming each line has one ZIP code
-        }
-        fclose($handle);
-    }
-    return $zipCodes;
-}
-
 $square_footage = isset($_COOKIE['square_footage']) ? $_COOKIE['square_footage'] : '';
 $home_type = isset($_COOKIE['home_type']) ? $_COOKIE['home_type'] : '';
 $story = isset($_COOKIE['story']) ? $_COOKIE['story'] : '';
@@ -175,10 +164,8 @@ if (!empty($square_footage) && isSpamLead($square_footage)) {
 }
 
 if(!empty($zip_code) && !empty($first_name) && !empty($last_name) && !empty($phone_number) && !empty($email) && !empty($final_price)){
-    $zipCodes = loadZipCodes('zip_codes.csv');
-    if(in_array( $zip_code, $zipCodes)){
-        $curl = curl_init();
-        
+    
+    // if (canProcessZipLead($zip_code)) {
         global $wpdb;
 
         $table_name = $wpdb->prefix . 'calculator_data';
@@ -242,53 +229,54 @@ if(!empty($zip_code) && !empty($first_name) && !empty($last_name) && !empty($pho
             } else {
                 //  echo 'Failed to create table.<br>';
             }
-        }
+        // }
 
+        if (canProcessZipLead($zip_code)) {
+            // Send to Lead Conduit / Lead Perfection for supported home types only.
+            $shouldSendToLeadConduit = ($home_type !== "Manufactured / Mobile Home");
+            if ($shouldSendToLeadConduit) {
+                $postData = http_build_query([
+                    'firstname' => $first_name,
+                    'lastname' => $last_name,
+                    'zip' => $zip_code,
+                    'phone1' => $phone_number,
+                    'email' => $email,
+                    'srs_id' => '1816',
+                    'notes' => $notes,
+                    'sender' => 'RoofCostsDotNetDirect',
+                    'productid' => "Roof",
+                    'trustedform_cert_url' => $trustedform_cert_url
+                ]);
 
-        // Send to Lead Conduit / Lead Perfection for supported home types only.
-        $shouldSendToLeadConduit = ($home_type !== "Manufactured / Mobile Home");
-        if ($shouldSendToLeadConduit) {
-            $postData = http_build_query([
-                'firstname' => $first_name,
-                'lastname' => $last_name,
-                'zip' => $zip_code,
-                'phone1' => $phone_number,
-                'email' => $email,
-                'srs_id' => '1816',
-                'notes' => $notes,
-                'sender' => 'RoofCostsDotNetDirect',
-                'productid' => "Roof",
-                'trustedform_cert_url' => $trustedform_cert_url
-            ]);
+                curl_setopt_array($curl, array(
+                    CURLOPT_URL => 'https://app.leadconduit.com/flows/684198bbf6391f0c24db713a/sources/6842f4c980611fb482cdf0cb/submit',
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_ENCODING => '',
+                    CURLOPT_MAXREDIRS => 10,
+                    CURLOPT_TIMEOUT => 0,
+                    CURLOPT_FOLLOWLOCATION => true,
+                    CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                    CURLOPT_CUSTOMREQUEST => 'POST',
+                    CURLOPT_POST => true,
+                    CURLOPT_POSTFIELDS => $postData,
+                    CURLOPT_HTTPHEADER => array(
+                        'Content-Type: application/x-www-form-urlencoded',
+                        'Cookie: ASPSESSIONIDAWQSCQQD=IDMDHKFCNAAFKCCAFLMKDPPF'
+                    ),
+                ));
 
-            curl_setopt_array($curl, array(
-                CURLOPT_URL => 'https://app.leadconduit.com/flows/684198bbf6391f0c24db713a/sources/6842f4c980611fb482cdf0cb/submit',
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_ENCODING => '',
-                CURLOPT_MAXREDIRS => 10,
-                CURLOPT_TIMEOUT => 0,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                CURLOPT_CUSTOMREQUEST => 'POST',
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => $postData,
-                CURLOPT_HTTPHEADER => array(
-                    'Content-Type: application/x-www-form-urlencoded',
-                    'Cookie: ASPSESSIONIDAWQSCQQD=IDMDHKFCNAAFKCCAFLMKDPPF'
-                ),
-            ));
+                $response = curl_exec($curl);
 
-            $response = curl_exec($curl);
+                if (curl_errno($curl)) {
+                    echo "Error";
+                    // echo 'Error: ' . curl_error($curl);
+                }
 
-            if (curl_errno($curl)) {
-                echo "Error";
-                // echo 'Error: ' . curl_error($curl);
+                $curl = null;
+            } else {
+                // Release handle without deprecated curl_close() on PHP 8.5+
+                $curl = null;
             }
-
-            curl_close($curl);
-        } else {
-            // Close curl handle if not sending to API
-            curl_close($curl);
         }
     }
 }
