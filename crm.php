@@ -145,6 +145,54 @@ Trusted Certificate URL: $trustedform_cert_url
 EOT;
 
 /**
+ * Validate whether a ZIP can be processed.
+ * ZIP values are loaded from zip_codes.csv once per request.
+ */
+function canProcessZipLead($zip_code) {
+    static $allowed_zips = null;
+
+    // Support ZIP+4 and formatted ZIP values by keeping only first 5 digits.
+    $digits_only = preg_replace('/\D+/', '', (string) $zip_code);
+    $normalized_zip = substr($digits_only, 0, 5);
+
+    if (strlen($normalized_zip) !== 5) {
+        return false;
+    }
+
+    if ($allowed_zips === null) {
+        $allowed_zips = array();
+        $zip_file_path = __DIR__ . '/zip_codes.csv';
+
+        if (!file_exists($zip_file_path) || !is_readable($zip_file_path)) {
+            return false;
+        }
+
+        $zip_file_handle = fopen($zip_file_path, 'r');
+        if ($zip_file_handle === false) {
+            return false;
+        }
+
+        while (($line = fgetcsv($zip_file_handle)) !== false) {
+            if (!isset($line[0])) {
+                continue;
+            }
+
+            $zip_from_file = trim((string) $line[0]);
+            if ($zip_from_file === '') {
+                continue;
+            }
+
+            // Keep as string to preserve leading zeros.
+            $allowed_zips[$zip_from_file] = true;
+        }
+
+        fclose($zip_file_handle);
+    }
+
+    return isset($allowed_zips[$normalized_zip]);
+}
+
+/**
  * Filter to avoid spam leads
  * If square footage is less than 500 or greater than 8000, ignore the lead
  */
@@ -165,119 +213,122 @@ if (!empty($square_footage) && isSpamLead($square_footage)) {
 
 if(!empty($zip_code) && !empty($first_name) && !empty($last_name) && !empty($phone_number) && !empty($email) && !empty($final_price)){
     
-    // if (canProcessZipLead($zip_code)) {
-        global $wpdb;
+    global $wpdb;
 
-        $table_name = $wpdb->prefix . 'calculator_data';
+    $table_name = $wpdb->prefix . 'calculator_data';
 
-        // Validate required fields
-        if(empty($first_name) || empty($last_name) || empty($email) || empty($phone_number)) {
-            echo "Error: Required fields are missing.<br>";
-            echo "First Name: " . ($first_name ?: 'Missing') . "<br>";
-            echo "Last Name: " . ($last_name ?: 'Missing') . "<br>";
-            echo "Email: " . ($email ?: 'Missing') . "<br>";
-            echo "Phone: " . ($phone_number ?: 'Missing') . "<br>";
-            die();
-        }
+    // Validate required fields
+    if(empty($first_name) || empty($last_name) || empty($email) || empty($phone_number)) {
+        echo "Error: Required fields are missing.<br>";
+        echo "First Name: " . ($first_name ?: 'Missing') . "<br>";
+        echo "Last Name: " . ($last_name ?: 'Missing') . "<br>";
+        echo "Email: " . ($email ?: 'Missing') . "<br>";
+        echo "Phone: " . ($phone_number ?: 'Missing') . "<br>";
+        die();
+    }
 
-        $first_name = sanitize_text_field($first_name);
-        $last_name = sanitize_text_field($last_name);
-        $zip = sanitize_text_field($zip_code);
-        $phone = sanitize_text_field($phone_number);
-        $email = sanitize_email($email);
-        $notes = clean_notes_data($notes);
+    $first_name = sanitize_text_field($first_name);
+    $last_name = sanitize_text_field($last_name);
+    $zip = sanitize_text_field($zip_code);
+    $phone = sanitize_text_field($phone_number);
+    $email = sanitize_email($email);
+    $notes = clean_notes_data($notes);
 
-        // Try to insert data
-        $result = $wpdb->insert(
-            $table_name,
-            array(
-                'first_name' => $first_name,
-                'last_name' => $last_name,
-                'zip' => $zip,
-                'phone' => $phone,
-                'email' => $email,
-                'notes' => $notes
-            )
-        );
+    // Try to insert data
+    $result = $wpdb->insert(
+        $table_name,
+        array(
+            'first_name' => $first_name,
+            'last_name' => $last_name,
+            'zip' => $zip,
+            'phone' => $phone,
+            'email' => $email,
+            'notes' => $notes
+        )
+    );
+    
+    if($result !== false && $wpdb->insert_id) {
+        //  echo 'Data successfully inserted! ID: ' . $wpdb->insert_id . '<br>';
+    } else {
+        //  echo 'Failed to insert data. Error: ' . $wpdb->last_error . '<br>';
+        //  echo 'Last Query: ' . $wpdb->last_query . '<br>';
         
-        if($result !== false && $wpdb->insert_id) {
-            //  echo 'Data successfully inserted! ID: ' . $wpdb->insert_id . '<br>';
-        } else {
-            //  echo 'Failed to insert data. Error: ' . $wpdb->last_error . '<br>';
-            //  echo 'Last Query: ' . $wpdb->last_query . '<br>';
-            
-            // Try to create table if it doesn't exist
-            if(create_calculator_data_table_if_exists()) {
-                // Try insert again
-                $result = $wpdb->insert(
-                    $table_name,
-                    array(
-                        'first_name' => $first_name,
-                        'last_name' => $last_name,
-                        'zip' => $zip,
-                        'phone' => $phone,
-                        'email' => $email,
-                        'notes' => $notes
-                    )
-                );
-                
-                if($result !== false && $wpdb->insert_id) {
-                    //  echo 'Data successfully inserted after table creation! ID: ' . $wpdb->insert_id . '<br>';
-                } else {
-                    //  echo 'Still failed after table creation. Error: ' . $wpdb->last_error . '<br>';
-                }
-            } else {
-                //  echo 'Failed to create table.<br>';
-            }
-        // }
-
-        if (canProcessZipLead($zip_code)) {
-            // Send to Lead Conduit / Lead Perfection for supported home types only.
-            $shouldSendToLeadConduit = ($home_type !== "Manufactured / Mobile Home");
-            if ($shouldSendToLeadConduit) {
-                $postData = http_build_query([
-                    'firstname' => $first_name,
-                    'lastname' => $last_name,
-                    'zip' => $zip_code,
-                    'phone1' => $phone_number,
+        // Try to create table if it doesn't exist
+        if(create_calculator_data_table_if_exists()) {
+            // Try insert again
+            $result = $wpdb->insert(
+                $table_name,
+                array(
+                    'first_name' => $first_name,
+                    'last_name' => $last_name,
+                    'zip' => $zip,
+                    'phone' => $phone,
                     'email' => $email,
-                    'srs_id' => '1816',
-                    'notes' => $notes,
-                    'sender' => 'RoofCostsDotNetDirect',
-                    'productid' => "Roof",
-                    'trustedform_cert_url' => $trustedform_cert_url
-                ]);
-
-                curl_setopt_array($curl, array(
-                    CURLOPT_URL => 'https://app.leadconduit.com/flows/684198bbf6391f0c24db713a/sources/6842f4c980611fb482cdf0cb/submit',
-                    CURLOPT_RETURNTRANSFER => true,
-                    CURLOPT_ENCODING => '',
-                    CURLOPT_MAXREDIRS => 10,
-                    CURLOPT_TIMEOUT => 0,
-                    CURLOPT_FOLLOWLOCATION => true,
-                    CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                    CURLOPT_CUSTOMREQUEST => 'POST',
-                    CURLOPT_POST => true,
-                    CURLOPT_POSTFIELDS => $postData,
-                    CURLOPT_HTTPHEADER => array(
-                        'Content-Type: application/x-www-form-urlencoded',
-                        'Cookie: ASPSESSIONIDAWQSCQQD=IDMDHKFCNAAFKCCAFLMKDPPF'
-                    ),
-                ));
-
-                $response = curl_exec($curl);
-
-                if (curl_errno($curl)) {
-                    echo "Error";
-                    // echo 'Error: ' . curl_error($curl);
-                }
-
-                $curl = null;
+                    'notes' => $notes
+                )
+            );
+            
+            if($result !== false && $wpdb->insert_id) {
+                //  echo 'Data successfully inserted after table creation! ID: ' . $wpdb->insert_id . '<br>';
             } else {
-                // Release handle without deprecated curl_close() on PHP 8.5+
-                $curl = null;
+                //  echo 'Still failed after table creation. Error: ' . $wpdb->last_error . '<br>';
             }
+        } else {
+            //  echo 'Failed to create table.<br>';
+        }
+    }
+
+    if (canProcessZipLead($zip_code)) {
+        // Send to Lead Conduit / Lead Perfection for supported home types only.
+        $shouldSendToLeadConduit = ($home_type !== "Manufactured / Mobile Home");
+        if ($shouldSendToLeadConduit) {
+            $curl = curl_init();
+            $postData = [
+                'compid' => 'LBNFI',
+                'pubid' => 'YDU8YHMQ',
+                'campid' => 'XOVYSM',
+                'auth' => '87D80C6A-EBAE-4BC8-A1B3-3144440FB5AF',
+                'first' => $first_name,
+                'last' => $last_name,
+                'phone' => $phone_number,
+                'email' => $email,
+                'product' => 'Roof',
+                'zip' => $zip_code,
+                'notes' => $notes,
+                'sender' => 'RoofCostsDotNetDirect',
+                "price" => "0.0",
+                'tf' => $trustedform_cert_url
+            ];
+
+            curl_setopt_array($curl, array(
+                CURLOPT_URL => 'https://are.opta.io/ca/submit',
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_ENCODING => '',
+                CURLOPT_MAXREDIRS => 10,
+                CURLOPT_TIMEOUT => 0,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+                CURLOPT_CUSTOMREQUEST => 'POST',
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => json_encode($postData),
+                CURLOPT_HTTPHEADER => array(
+                    'Content-Type: application/json'
+                ),
+            ));
+
+            $response = curl_exec($curl);
+
+            if (curl_errno($curl)) {
+                echo "Error";
+                // echo 'Error: ' . curl_error($curl);
+            }
+
+            $curl = null;
+        } else {
+            // Release handle without deprecated curl_close() on PHP 8.5+
+            $curl = null;
         }
     }
 }
+die();
 header('Location: /thank-you/');
