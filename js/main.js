@@ -303,7 +303,7 @@ function setCookie(cname,cvalue,exdays) {
   var d = new Date();
   d.setTime(d.getTime() + (exdays*24*60*60*1000)); // 1 day
   var expires = "expires=" + d.toGMTString();
-  document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+  document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/;SameSite=Lax";
 }
 
 function getCookie(cname) {
@@ -463,53 +463,44 @@ $('#submit_btn').click((e) => {
   setCookie("final_price", final_price, 1);
   setCookie("low_price", low_price, 1);
   setCookie("high_price", high_price, 1);
-  setCookie("trustedform_cert_url", trustedform_cert_url, 1); 
+  setCookie("trustedform_cert_url", trustedform_cert_url, 1);
 
   $('.overlay').removeClass('visible');
 
+  // Create a form to submit data via POST (more reliable than cookies for guest users)
+  const form = document.createElement('form');
+  form.method = 'POST';
+  form.action = '/crm.php';
 
-  // const sendCRM = async () => {
+  // Add all data as hidden fields
+  const formData = {
+    square_footage: square_footage,
+    home_type: home_type,
+    story: story,
+    pitch: pitch,
+    roof_type: roof_type,
+    zip_code: zip_code,
+    first_name: first_name,
+    last_name: last_name,
+    email: email,
+    phone_number: phone_number,
+    final_price: final_price,
+    low_price: low_price,
+    high_price: high_price,
+    trustedform_cert_url: trustedform_cert_url
+  };
 
-  //   const url = "https://th97.leadperfection.com/batch/addleads.asp";
-  //   const notes = "Based on the project details—a "+square_footage+" sq. ft. "+pitch+" "+roof_type+" on a "+story+" building—the estimated roofing cost is approximately $"+final_price+"."
-  //   console.log(notes);
+  for (const key in formData) {
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.name = key;
+    input.value = formData[key];
+    form.appendChild(input);
+  }
 
-  //   const data = new URLSearchParams();
-  //   data.append('firstname', first_name);
-  //   data.append('lastname', last_name);
-  //   data.append('zip', zip_code);
-  //   data.append('phone1', phone_number);
-  //   data.append('email', email);
-  //   data.append('srs_id', 1816);
-  //   data.append('notes', notes);
-  //   data.append('sender', "RoofCostsDotNetDirect");
-
-
-  //   try {
-  //     const response = await fetch(url, {
-  //       method: 'POST',
-  //       headers: {
-  //         'Content-Type': 'application/x-www-form-urlencoded',
-  //       },
-  //       body: data,
-  //     });
-
-  //     // const result = await response.json();
-  //     console.log('Server response:', response);
-  //     // window.location.href="/thank-you/"
-  //   } catch (error) {
-  //     console.error('Error sending data:', error);
-  //     // window.location.href="/thank-you/"
-  //   }
-  
-  
-  
-  
-  // }
-  // sendCRM();
-  
-  window.location.href="/crm.php"
-  // window.location.href="/thank-you/"
+  // Submit the form
+  document.body.appendChild(form);
+  form.submit();
 }) //End submit button
 
 
@@ -626,19 +617,20 @@ function validateUSPhoneNumber() {
 }
 
 function resetCookies(){
-  document.cookie = "square_footage=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "home_type=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "story=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "pitch=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "roof_type=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "zip_code=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "first_name=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "last_name=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "email=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "phone_number=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "final_price=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "low_price=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
-  document.cookie = "high_price=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
+  document.cookie = "square_footage=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
+  document.cookie = "home_type=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
+  document.cookie = "story=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
+  document.cookie = "pitch=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
+  document.cookie = "roof_type=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
+  document.cookie = "zip_code=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
+  document.cookie = "first_name=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
+  document.cookie = "last_name=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
+  document.cookie = "email=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
+  document.cookie = "phone_number=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
+  document.cookie = "final_price=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
+  document.cookie = "low_price=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
+  document.cookie = "high_price=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
+  document.cookie = "trustedform_cert_url=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;SameSite=Lax";
 }
 
 

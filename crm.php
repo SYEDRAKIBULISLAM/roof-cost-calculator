@@ -1,7 +1,6 @@
 <?php
 define('WP_USE_THEMES', false);
 require('./wp-load.php');
-
 function create_calculator_data_table_if_exists() {
     global $wpdb;
     
@@ -105,21 +104,21 @@ function debug_table_structure() {
 debug_table_structure();
 
 
-$square_footage = isset($_COOKIE['square_footage']) ? $_COOKIE['square_footage'] : '';
-$home_type = isset($_COOKIE['home_type']) ? $_COOKIE['home_type'] : '';
-$story = isset($_COOKIE['story']) ? $_COOKIE['story'] : '';
-$pitch = isset($_COOKIE['pitch']) ? $_COOKIE['pitch'] : '';
-$roof_type = isset($_COOKIE['roof_type']) ? $_COOKIE['roof_type'] : '';
-$zip_code = isset($_COOKIE['zip_code']) ? $_COOKIE['zip_code'] : '';
-$first_name = isset($_COOKIE['first_name']) ? $_COOKIE['first_name'] : '';
-$last_name = isset($_COOKIE['last_name']) ? $_COOKIE['last_name'] : '';
-$email = isset($_COOKIE['email']) ? $_COOKIE['email'] : '';
-$phone_number = isset($_COOKIE['phone_number']) ? preg_replace('/\D+/', '', $_COOKIE['phone_number']) : '';
-$final_price = isset($_COOKIE['final_price']) ? $_COOKIE['final_price'] : '';
-$low_price = isset($_COOKIE['low_price']) ? $_COOKIE['low_price'] : '';
-$high_price = isset($_COOKIE['high_price']) ? $_COOKIE['high_price'] : '';
-$trustedform_cert_url = isset($_COOKIE['trustedform_cert_url']) ? $_COOKIE['trustedform_cert_url'] : '';
-
+// Try to get data from POST first (more reliable than cookies), then fall back to cookies
+$square_footage = isset($_POST['square_footage']) ? $_POST['square_footage'] : (isset($_COOKIE['square_footage']) ? $_COOKIE['square_footage'] : '');
+$home_type = isset($_POST['home_type']) ? $_POST['home_type'] : (isset($_COOKIE['home_type']) ? $_COOKIE['home_type'] : '');
+$story = isset($_POST['story']) ? $_POST['story'] : (isset($_COOKIE['story']) ? $_COOKIE['story'] : '');
+$pitch = isset($_POST['pitch']) ? $_POST['pitch'] : (isset($_COOKIE['pitch']) ? $_COOKIE['pitch'] : '');
+$roof_type = isset($_POST['roof_type']) ? $_POST['roof_type'] : (isset($_COOKIE['roof_type']) ? $_COOKIE['roof_type'] : '');
+$zip_code = isset($_POST['zip_code']) ? $_POST['zip_code'] : (isset($_COOKIE['zip_code']) ? $_COOKIE['zip_code'] : '');
+$first_name = isset($_POST['first_name']) ? $_POST['first_name'] : (isset($_COOKIE['first_name']) ? $_COOKIE['first_name'] : '');
+$last_name = isset($_POST['last_name']) ? $_POST['last_name'] : (isset($_COOKIE['last_name']) ? $_COOKIE['last_name'] : '');
+$email = isset($_POST['email']) ? $_POST['email'] : (isset($_COOKIE['email']) ? $_COOKIE['email'] : '');
+$phone_number = isset($_POST['phone_number']) ? preg_replace('/\D+/', '', $_POST['phone_number']) : (isset($_COOKIE['phone_number']) ? preg_replace('/\D+/', '', $_COOKIE['phone_number']) : '');
+$final_price = isset($_POST['final_price']) ? $_POST['final_price'] : (isset($_COOKIE['final_price']) ? $_COOKIE['final_price'] : '');
+$low_price = isset($_POST['low_price']) ? $_POST['low_price'] : (isset($_COOKIE['low_price']) ? $_COOKIE['low_price'] : '');
+$high_price = isset($_POST['high_price']) ? $_POST['high_price'] : (isset($_COOKIE['high_price']) ? $_COOKIE['high_price'] : '');
+$trustedform_cert_url = isset($_POST['trustedform_cert_url']) ? $_POST['trustedform_cert_url'] : (isset($_COOKIE['trustedform_cert_url']) ? $_COOKIE['trustedform_cert_url'] : '');
 // setcookie("zip_code", "");
 // setcookie("first_name", "");
 // setcookie("last_name", "");
@@ -143,6 +142,9 @@ Stories: $story
 Estimated Total: $final_price
 Trusted Certificate URL: $trustedform_cert_url
 EOT;
+
+/** @var array|null Lead payload to POST after redirect (slow API runs in background of this request). */
+$crm_async_lead_payload = null;
 
 /**
  * Validate whether a ZIP can be processed.
@@ -204,11 +206,70 @@ function isSpamLead($square_footage) {
     return false;
 }
 
-// Check for spam leads before processing
-if (!empty($square_footage) && isSpamLead($square_footage)) {
-    // Ignore spam lead - exit without sending data
-    header('Location: /thank-you/');
-    exit();
+/**
+ * POST JSON to Lead Conduit (blocking). Used after the HTTP response is flushed so the visitor is not waiting.
+ */
+function crm_post_lead_conduit_json(array $post_data) {
+    $body = wp_json_encode($post_data);
+    if ($body === false) {
+        return;
+    }
+
+    $curl = curl_init('https://are.opta.io/ca/submit');
+    if ($curl === false) {
+        crm_post_lead_conduit_nonblocking($post_data);
+        return;
+    }
+
+    curl_setopt_array($curl, array(
+        CURLOPT_POST => true,
+        CURLOPT_POSTFIELDS => $body,
+        CURLOPT_HTTPHEADER => array('Content-Type: application/json'),
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_CONNECTTIMEOUT => 20,
+        CURLOPT_TIMEOUT => 120,
+        CURLOPT_FOLLOWLOCATION => true,
+        CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
+    ));
+
+    curl_exec($curl);
+    if (curl_errno($curl)) {
+        error_log('crm.php Lead Conduit: ' . curl_error($curl));
+    }
+    curl_close($curl);
+}
+
+/**
+ * Fire-and-forget Lead Conduit POST when FastCGI flush is unavailable (visitor may wait briefly for connect).
+ */
+function crm_post_lead_conduit_nonblocking(array $post_data) {
+    $body = wp_json_encode($post_data);
+    if ($body === false) {
+        return;
+    }
+
+    wp_remote_post(
+        'https://are.opta.io/ca/submit',
+        array(
+            'timeout' => 0.01,
+            'blocking' => false,
+            'headers' => array('Content-Type' => 'application/json'),
+            'body' => $body,
+        )
+    );
+}
+
+/**
+ * Run Lead API after redirect: flush response first on PHP-FPM, then complete the POST.
+ */
+function crm_dispatch_lead_conduit_async(array $post_data) {
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+        crm_post_lead_conduit_json($post_data);
+        return;
+    }
+
+    crm_post_lead_conduit_nonblocking($post_data);
 }
 
 if(!empty($zip_code) && !empty($first_name) && !empty($last_name) && !empty($phone_number) && !empty($email) && !empty($final_price)){
@@ -278,12 +339,17 @@ if(!empty($zip_code) && !empty($first_name) && !empty($last_name) && !empty($pho
         }
     }
 
+    // Check for spam leads before processing
+    if (!empty($square_footage) && isSpamLead($square_footage)) {
+        // Ignore spam lead - exit without sending data
+        header('Location: /thank-you/');
+        exit();
+    }
     if (canProcessZipLead($zip_code)) {
-        // Send to Lead Conduit / Lead Perfection for supported home types only.
+        // Send to Lead Conduit / Lead Perfection for supported home types only (deferred until after redirect).
         $shouldSendToLeadConduit = ($home_type !== "Manufactured / Mobile Home");
         if ($shouldSendToLeadConduit) {
-            $curl = curl_init();
-            $postData = [
+            $crm_async_lead_payload = array(
                 'compid' => 'LBNFI',
                 'pubid' => 'YDU8YHMQ',
                 'campid' => 'XOVYSM',
@@ -295,40 +361,18 @@ if(!empty($zip_code) && !empty($first_name) && !empty($last_name) && !empty($pho
                 'product' => 'Roof',
                 'zip' => $zip_code,
                 'notes' => $notes,
-                'sender' => 'RoofCostsDotNetDirect',
-                "price" => "0.0",
-                'tf' => $trustedform_cert_url
-            ];
-
-            curl_setopt_array($curl, array(
-                CURLOPT_URL => 'https://are.opta.io/ca/submit',
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_ENCODING => '',
-                CURLOPT_MAXREDIRS => 10,
-                CURLOPT_TIMEOUT => 0,
-                CURLOPT_FOLLOWLOCATION => true,
-                CURLOPT_HTTP_VERSION => CURL_HTTP_VERSION_1_1,
-                CURLOPT_CUSTOMREQUEST => 'POST',
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => json_encode($postData),
-                CURLOPT_HTTPHEADER => array(
-                    'Content-Type: application/json'
-                ),
-            ));
-
-            $response = curl_exec($curl);
-
-            if (curl_errno($curl)) {
-                echo "Error";
-                // echo 'Error: ' . curl_error($curl);
-            }
-
-            $curl = null;
-        } else {
-            // Release handle without deprecated curl_close() on PHP 8.5+
-            $curl = null;
+                'sender' => 'roofcosts.net',
+                'price' => '0.0',
+                'tf' => $trustedform_cert_url,
+            );
         }
     }
 }
-die();
+
 header('Location: /thank-you/');
+
+if ($crm_async_lead_payload !== null) {
+    ç($crm_async_lead_payload);
+}
+
+exit();
